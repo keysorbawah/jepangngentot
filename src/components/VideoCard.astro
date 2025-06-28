@@ -31,7 +31,7 @@ const videoDetailPath = `${url}/${videoSlug}-${video.id}/`;
     />
     {video.previewUrl && (
       <video
-        preload="auto"
+        preload="none"
         loop
         muted
         class="video-preview"
@@ -53,94 +53,40 @@ const videoDetailPath = `${url}/${videoSlug}-${video.id}/`;
 </a>
 
 <script>
-  document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('.video-card').forEach(card => {
-      const videoPreview = card.querySelector('.video-preview');
-      const playOverlay = card.querySelector('.play-overlay');
+  document.querySelectorAll('.video-card').forEach(card => {
+    const videoPreview = card.querySelector('.video-preview');
 
-      if (videoPreview) {
-        // --- Intersection Observer untuk Autoplay Muted ---
-        const observer = new IntersectionObserver((entries) => {
-          entries.forEach(entry => {
-            if (entry.isIntersecting) {
-              // Kartu masuk ke viewport
-              if (!card.classList.contains('video-preview-error')) {
-                const src = videoPreview.getAttribute('data-src');
-                if (src && videoPreview.src !== src) {
-                  videoPreview.src = src;
-                  videoPreview.load();
-                }
-                
-                // PENTING: Pastikan muted sebelum mencoba play
-                videoPreview.muted = true; 
-                videoPreview.play().then(() => {
-                  card.classList.add('playing');
-                  card.classList.remove('needs-play'); // Hapus overlay jika berhasil autoplay
-                }).catch(e => {
-                  // Jika autoplay diblokir (biasanya karena adanya trek audio atau kebijakan browser)
-                  console.warn('Mobile autoplay muted failed, showing play overlay:', e);
-                  card.classList.remove('playing');
-                  card.classList.add('needs-play'); // Tampilkan overlay play
-                });
-              }
-            } else {
-              // Kartu keluar dari viewport
-              if (videoPreview && !videoPreview.paused) {
-                videoPreview.pause();
-                videoPreview.currentTime = 0; // Reset ke awal
-                card.classList.remove('playing');
-                card.classList.remove('needs-play'); // Sembunyikan overlay jika keluar
-              }
+    if (videoPreview) {
+      let playTimeout; // Gunakan timeout untuk menunda pemutaran
+
+      card.addEventListener('mouseenter', () => {
+        // Hapus timeout sebelumnya jika ada
+        clearTimeout(playTimeout); 
+        
+        // Atur timeout untuk memulai pemutaran setelah sedikit penundaan
+        playTimeout = setTimeout(() => {
+          if (!card.classList.contains('video-preview-error')) {
+            const src = videoPreview.getAttribute('data-src');
+            if (src && videoPreview.src !== src) {
+              videoPreview.src = src;
+              videoPreview.load();
             }
-          });
-        }, { threshold: 0.7 }); // Sesuaikan threshold sesuai kebutuhan
-
-        observer.observe(card);
-
-        // --- Click/Tap Listener untuk Toggle Play/Pause dan Mute/Unmute ---
-        card.addEventListener('click', (event) => {
-          // Hanya tangani klik jika itu bukan navigasi ke halaman detail utama
-          // atau jika kita mengklik play-overlay
-          if (event.target === playOverlay || event.target === videoPreview) {
-              event.preventDefault(); // Mencegah navigasi link jika klik pada video/overlay
-
-              // Jika video belum dimuat, muat dulu
-              if (videoPreview.src === '') { 
-                const src = videoPreview.getAttribute('data-src');
-                if (src) {
-                    videoPreview.src = src;
-                    videoPreview.load();
-                }
-              }
-
-              if (videoPreview.paused) {
-                videoPreview.muted = false; // Coba unmute saat klik
-                videoPreview.play().then(() => {
-                  card.classList.add('playing');
-                  card.classList.remove('needs-play'); // Sembunyikan overlay
-                }).catch(e => {
-                  console.error("Manual play failed, cannot unmute or play:", e);
-                  // Jika ini gagal juga, mungkin browser memblokir unmuting,
-                  // Tampilkan pesan error atau tombol mute terpisah.
-                  videoPreview.muted = true; // Kembali ke muted jika unmute gagal
-                  videoPreview.play().then(() => {
-                    card.classList.add('playing');
-                    card.classList.add('needs-play'); // Tampilkan lagi overlay karena tidak bisa unmute
-                  }).catch(e_muted => {
-                    console.error("Manual play muted failed after unmute attempt:", e_muted);
-                    card.classList.add('video-preview-error');
-                  });
-                });
-              } else {
-                videoPreview.pause();
-                videoPreview.muted = true; // Mute lagi saat dijeda
-                card.classList.remove('playing');
-                card.classList.add('needs-play'); // Tampilkan overlay play lagi
-              }
+            videoPreview.play().catch(e => {
+              console.warn('Video playback failed, adding error class:', e);
+              card.classList.add('video-preview-error');
+            });
           }
-          // Jika event.target bukan videoPreview atau playOverlay, biarkan link <a> bekerja
-        });
-      }
-    });
+        }, 50); // Tunda 500ms (setengah detik)
+      });
+
+      card.addEventListener('mouseleave', () => {
+        // Hapus timeout jika mouse keluar sebelum video sempat diputar
+        clearTimeout(playTimeout); 
+        if (videoPreview && !videoPreview.paused) {
+          videoPreview.pause();
+          videoPreview.currentTime = 0; // Reset ke awal
+        }
+      });
+    }
   });
 </script>
