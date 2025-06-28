@@ -53,40 +53,115 @@ const videoDetailPath = `${url}/${videoSlug}-${video.id}/`;
 </a>
 
 <script>
-  document.querySelectorAll('.video-card').forEach(card => {
-    const videoPreview = card.querySelector('.video-preview');
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.video-card').forEach(card => {
+      const videoPreview = card.querySelector('.video-preview');
+      const videoThumbnail = card.querySelector('.video-thumbnail'); // Ambil thumbnail
+      let playTimeout; // Untuk desktop (mouseenter)
+      let observer; // Untuk mobile (IntersectionObserver)
 
-    if (videoPreview) {
-      let playTimeout; // Gunakan timeout untuk menunda pemutaran
-
-      card.addEventListener('mouseenter', () => {
-        // Hapus timeout sebelumnya jika ada
-        clearTimeout(playTimeout); 
-        
-        // Atur timeout untuk memulai pemutaran setelah sedikit penundaan
-        playTimeout = setTimeout(() => {
-          if (!card.classList.contains('video-preview-error')) {
-            const src = videoPreview.getAttribute('data-src');
-            if (src && videoPreview.src !== src) {
-              videoPreview.src = src;
-              videoPreview.load();
+      if (videoPreview) {
+        card.addEventListener('mouseenter', () => {
+          clearTimeout(playTimeout);
+          playTimeout = setTimeout(() => {
+            if (!card.classList.contains('video-preview-error')) {
+              const src = videoPreview.getAttribute('data-src');
+              if (src && videoPreview.src !== src) {
+                videoPreview.src = src;
+                videoPreview.load();
+              }
+              videoPreview.muted = true;
+              videoPreview.play().then(() => {
+                card.classList.add('playing');
+              }).catch(e => {
+                console.warn('Video playback failed on desktop, adding error class:', e);
+                card.classList.add('video-preview-error');
+              });
             }
-            videoPreview.play().catch(e => {
-              console.warn('Video playback failed, adding error class:', e);
-              card.classList.add('video-preview-error');
-            });
-          }
-        }, 50); // Tunda 500ms (setengah detik)
-      });
+          }, 300);
+        });
 
-      card.addEventListener('mouseleave', () => {
-        // Hapus timeout jika mouse keluar sebelum video sempat diputar
-        clearTimeout(playTimeout); 
-        if (videoPreview && !videoPreview.paused) {
-          videoPreview.pause();
-          videoPreview.currentTime = 0; // Reset ke awal
-        }
-      });
-    }
+        card.addEventListener('mouseleave', () => {
+          clearTimeout(playTimeout);
+          if (videoPreview && !videoPreview.paused) {
+            videoPreview.pause();
+            videoPreview.currentTime = 0;
+            card.classList.remove('playing');
+          }
+        });
+
+        // --- LOGIKA UNTUK MOBILE (INTERSECTION OBSERVER & CLICK) ---
+
+        // Intersection Observer untuk autoplay muted saat kartu masuk viewport
+        observer = new IntersectionObserver((entries) => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              // Kartu masuk ke viewport
+              if (!card.classList.contains('video-preview-error')) {
+                const src = videoPreview.getAttribute('data-src');
+                if (src && videoPreview.src !== src) {
+                  videoPreview.src = src;
+                  videoPreview.load();
+                }
+                // Autoplay di mobile harus muted!
+                videoPreview.muted = true;
+                videoPreview.play().then(() => {
+                  card.classList.add('playing');
+                }).catch(e => {
+                  console.warn('Mobile autoplay muted failed:', e);
+                  card.classList.add('video-preview-error');
+                });
+              }
+            } else {
+              // Kartu keluar dari viewport
+              if (videoPreview && !videoPreview.paused) {
+                videoPreview.pause();
+                videoPreview.currentTime = 0;
+                card.classList.remove('playing');
+              }
+            }
+          });
+        }, { threshold: 0.7 }); // Video harus 70% terlihat untuk diputar
+
+        observer.observe(card); // Mulai mengamati setiap video-card
+
+        // Event listener untuk klik/sentuh di mobile (atau desktop)
+        // Ini akan toggle play/pause dan suara
+        card.addEventListener('click', (event) => {
+          event.preventDefault(); // Mencegah navigasi ke halaman detail saat mengklik video
+                                  // Hati-hati jika ini mengganggu navigasi link utama Anda!
+                                  // Mungkin lebih baik hanya menargetkan videoPreview saja untuk click
+          if (videoPreview.src === '') { // Jika video belum dimuat, muat dulu
+            const src = videoPreview.getAttribute('data-src');
+            if (src) {
+                videoPreview.src = src;
+                videoPreview.load();
+            }
+          }
+
+          if (videoPreview.paused) {
+            // Coba putar dan unmute
+            videoPreview.muted = false; // Coba unmute
+            videoPreview.play().then(() => {
+              card.classList.add('playing');
+            }).catch(e => {
+              console.warn('Click play failed, showing error or not playing:', e);
+              // Tampilkan UI "Tap to Play" atau pesan error
+            });
+          } else {
+            // Jeda video
+            videoPreview.pause();
+            videoPreview.muted = true; // Mute lagi saat dijeda
+            card.classList.remove('playing');
+          }
+        });
+
+        // Hapus observer saat komponen dihancurkan (penting untuk SPA jika Astro mendukungnya)
+        // Atau jika card dikeluarkan dari DOM secara dinamis
+        // window.addEventListener('beforeunload', () => {
+        //   if (observer) observer.disconnect();
+        // });
+      }
+    });
   });
 </script>
